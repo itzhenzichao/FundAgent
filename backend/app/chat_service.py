@@ -7,10 +7,7 @@ from app.db import get_connection, init_tables
 from app.fund_service import FundService
 from app.industry_service import IndustryService
 
-# 中转服务配置
-API_KEY = "your_api_key_here"
-BASE_URL = "your_base_url_here"
-MODEL = "glm-5.1"
+from app.config import API_KEY, BASE_URL, MODEL
 
 # 加载知识库（模块级，只加载一次）
 KNOWLEDGE_DIR = os.path.join(os.path.dirname(__file__), "knowledge")

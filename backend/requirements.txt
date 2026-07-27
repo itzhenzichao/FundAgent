@@ -1,0 +1,6 @@
+akshare
+efinance
+fastapi
+sse-starlette
+zhipuai
+uvicorn

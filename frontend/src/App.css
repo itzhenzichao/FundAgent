@@ -1,0 +1,11 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.chat-markdown p { margin: 0 0 8px 0; }
+.chat-markdown p:last-child { margin-bottom: 0; }
+.chat-markdown ul, .chat-markdown ol { padding-left: 20px; margin: 4px 0; }
+.chat-markdown table { border-collapse: collapse; margin: 8px 0; }
+.chat-markdown th, .chat-markdown td { border: 1px solid #d9d9d9; padding: 4px 8px; }
+.chat-markdown code { background: rgba(0,0,0,0.06); padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }

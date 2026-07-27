@@ -14,7 +14,7 @@
 
 ## 技术栈
 
-- 后端：Python 3.13 + FastAPI + SQLite + AkShare + efinance + zhipuai SDK
+- 后端：Python 3.13 + FastAPI + SQLite + AkShare + efinance + OpenAI SDK
 - 前端：React 19 + TypeScript + Ant Design + ECharts + Vite + react-markdown
 
 ## 启动
@@ -83,8 +83,8 @@ D:\Python313\python.exe -X utf8 build_industry_cache.py
 中转 API 配置在 `backend/app/chat_service.py` 中：
 
 ```python
-API_KEY = "your_api_key_here"       # 替换为你的 API key
-BASE_URL = "https://ai-gateway.xxxx.cn/v1"  # 中转服务地址
+API_KEY = "sk-xKGOx1zCdvMf09cN0XeOoQ"       # 替换为你的 API key
+BASE_URL = "https://ai-gateway.qianxin-inc.cn/v1"  # 中转服务地址
 MODEL = "glm-5.1"                   # 可选: glm-5.1, glm-5.2, deepseek-v4-pro, deepseek-v4-flash
 ```
 
@@ -110,6 +110,10 @@ MODEL = "glm-5.1"                   # 可选: glm-5.1, glm-5.2, deepseek-v4-pro,
 - 基金数据注入：4线程并发获取，约0.5秒
 - LLM API 响应：取决于中转网络延迟，约4-6秒
 - 总体首次响应时间：约5-7秒（缓存命中后约5秒）
+
+## 致谢
+
+AI 基金助手的知识库（投资方法 method.md、评分体系 scorecard.md）来自 [zhengxi-views](https://github.com/lyra81604/zhengxi-views) 项目的郑希观点库 Skill，感谢原作者的开放共享。
 
 ## 贡献
 

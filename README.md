@@ -83,8 +83,8 @@ D:\Python313\python.exe -X utf8 build_industry_cache.py
 中转 API 配置在 `backend/app/chat_service.py` 中：
 
 ```python
-API_KEY = "sk-xKGOx1zCdvMf09cN0XeOoQ"       # 替换为你的 API key
-BASE_URL = "https://ai-gateway.qianxin-inc.cn/v1"  # 中转服务地址
+API_KEY = "your_api_key_here"       # 替换为你的 API key
+BASE_URL = "your_base_url_here"  # 中转服务地址
 MODEL = "glm-5.1"                   # 可选: glm-5.1, glm-5.2, deepseek-v4-pro, deepseek-v4-flash
 ```
 

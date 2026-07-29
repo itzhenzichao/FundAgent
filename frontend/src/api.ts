@@ -86,3 +86,14 @@ export interface ReturnsData {
 
 export const getFundReturns = (code: string) =>
   api.get<ReturnsData>('/fund/returns', { params: { code } }).then(r => r.data)
+
+export interface BondHoldingData {
+  fund_code: string
+  bond_holdings: { bond_code: string; bond_name: string; holding_ratio: number | null; holding_value: number | null; quarter: string }[]
+  quarter: string
+  total_count: number
+  truncated: boolean
+}
+
+export const getBondHoldings = (code: string) =>
+  api.get<BondHoldingData>('/fund/bond-holdings', { params: { code } }).then(r => r.data)

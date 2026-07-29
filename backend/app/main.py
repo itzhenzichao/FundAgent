@@ -62,6 +62,14 @@ def get_fund_returns(code: str = Query(...)):
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@app.get("/api/fund/bond-holdings")
+def get_bond_holdings(code: str = Query(...), date: str = Query(None)):
+    try:
+        return fund_service.get_bond_holdings(code, date)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 # 自选基金接口
 class WatchlistItem(BaseModel):
     code: str

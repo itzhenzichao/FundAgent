@@ -25,7 +25,8 @@ export default function ChatBubble() {
   const [messages, setMessages] = useState<DisplayMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  // 流式内容单独管理，避免频繁 setMessages 导致状态丢失
+  // 用 ref 存流式内容，避免 onDone 嵌套 setState 导致重复渲染
+  const streamingRef = useRef('')
   const [streamingContent, setStreamingContent] = useState('')
   const abortRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -49,6 +50,7 @@ export default function ChatBubble() {
 
     setInput('')
     setLoading(true)
+    streamingRef.current = ''
     setStreamingContent('')
 
     // 立即添加用户消息到列表
@@ -58,20 +60,22 @@ export default function ChatBubble() {
       sessionId,
       text,
       (token) => {
-        setStreamingContent(prev => prev + token)
+        streamingRef.current += token
+        setStreamingContent(streamingRef.current)
       },
       () => {
-        // 流结束：把助手回复固化到 messages，清空 streamingContent
-        setStreamingContent(current => {
-          setMessages(prev => [...prev, { role: 'assistant', content: current }])
-          setLoading(false)
-          return ''
-        })
-      },
-      () => {
-        setMessages(prev => [...prev, { role: 'assistant', content: '抱歉，回复出错，请重试。' }])
-        setLoading(false)
+        // 流结束：先固化到 messages，再清空 streamingContent，避免同一渲染周期双重显示
+        const content = streamingRef.current
+        streamingRef.current = ''
+        setMessages(prev => [...prev, { role: 'assistant', content }])
         setStreamingContent('')
+        setLoading(false)
+      },
+      () => {
+        streamingRef.current = ''
+        setMessages(prev => [...prev, { role: 'assistant', content: '抱歉，回复出错，请重试。' }])
+        setStreamingContent('')
+        setLoading(false)
       },
     )
   }
@@ -79,12 +83,14 @@ export default function ChatBubble() {
   const handleNewChat = () => {
     setSessionId(uuidv4())
     setMessages([])
+    streamingRef.current = ''
     setStreamingContent('')
   }
 
   const handleClear = async () => {
     await clearChatSession(sessionId)
     setMessages([])
+    streamingRef.current = ''
     setStreamingContent('')
     message.success('对话已清除')
   }

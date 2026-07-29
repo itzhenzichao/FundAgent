@@ -3,8 +3,8 @@ import { Input, Card, Descriptions, Table, Tag, Alert, Spin, Typography, Row, Co
 import ChatBubble from './ChatBubble'
 import { SearchOutlined, StarOutlined, StarFilled, DeleteOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
-import { searchFund, getFundIndustry, addWatchlist, removeWatchlist, getWatchlist, getFundNav, getFundReturns } from './api'
-import type { FundInfo, FundIndustryResult, Holding, WatchlistItem, NavData, ReturnsData } from './api'
+import { searchFund, getFundIndustry, addWatchlist, removeWatchlist, getWatchlist, getFundNav, getFundReturns, getBondHoldings } from './api'
+import type { FundInfo, FundIndustryResult, Holding, WatchlistItem, NavData, ReturnsData, BondHoldingData } from './api'
 import './App.css'
 
 const PERIOD_OPTIONS = [
@@ -29,6 +29,7 @@ function App() {
   const [navPeriod, setNavPeriod] = useState('1y')
   const [navData, setNavData] = useState<NavData | null>(null)
   const [returnsData, setReturnsData] = useState<ReturnsData | null>(null)
+  const [bondData, setBondData] = useState<BondHoldingData | null>(null)
 
   const loadWatchlist = async () => {
     try {
@@ -55,6 +56,15 @@ function App() {
     }
   }
 
+  const loadBondData = async (code: string) => {
+    try {
+      const data = await getBondHoldings(code)
+      setBondData(data)
+    } catch {
+      setBondData(null)
+    }
+  }
+
   useEffect(() => { loadWatchlist() }, [])
 
   useEffect(() => {
@@ -70,6 +80,7 @@ function App() {
     setIndustryResult(null)
     setNavData(null)
     setReturnsData(null)
+    setBondData(null)
 
     if (!code) setFundCode(searchCode)
 
@@ -77,16 +88,21 @@ function App() {
       const info = await searchFund(searchCode)
       setFundInfo(info)
 
-      const industry = await getFundIndustry(searchCode, undefined, info.name)
-      setIndustryResult(industry)
-      setTruncated(industry.truncated)
-      setTotalCount(industry.total_count)
-
       setIsInWatchlist(watchlist.some(w => w.code === searchCode))
       setActiveTab('search')
 
       loadNavData(searchCode, navPeriod)
       loadReturnsData(searchCode)
+      loadBondData(searchCode)
+
+      // 行业分析独立调用，不影响主搜索流程
+      getFundIndustry(searchCode, undefined, info.name).then(industry => {
+        setIndustryResult(industry)
+        setTruncated(industry.truncated)
+        setTotalCount(industry.total_count)
+      }).catch(() => {
+        setIndustryResult(null)
+      })
     } catch (e: any) {
       setError(e.response?.data?.detail || e.message || '查询失败')
     } finally {
@@ -259,6 +275,19 @@ function App() {
     ? [...industryResult.industry_distribution.flatMap(ind => ind.stocks.map(s => ({ ...s, quarter: industryResult.quarter }))),
        ...industryResult.unmatched_stocks.map(s => ({ ...s, quarter: industryResult.quarter }))]
     : []
+
+  const bondHoldingsColumns = [
+    { title: '债券代码', dataIndex: 'bond_code', key: 'bond_code' },
+    { title: '债券名称', dataIndex: 'bond_name', key: 'bond_name' },
+    {
+      title: '占净值比例', dataIndex: 'holding_ratio', key: 'holding_ratio',
+      render: (v: number | null) => v ? `${v}%` : '-',
+    },
+    {
+      title: '持仓市值(万)', dataIndex: 'holding_value', key: 'holding_value',
+      render: (v: number | null) => v ? `${v}` : '-',
+    },
+  ]
 
   const watchlistColumns = [
     { title: '基金代码', dataIndex: 'code', key: 'code' },
@@ -457,6 +486,36 @@ function App() {
                       ),
                     },
                   ]}
+                />
+              )}
+
+              {bondData && bondData.bond_holdings.length > 0 && (
+                <Collapse
+                  defaultActiveKey={['bonds']}
+                  style={{ marginBottom: 24 }}
+                  items={[{
+                    key: 'bonds',
+                    label: `债券持仓 (${bondData.quarter})`,
+                    children: (
+                      <>
+                        {bondData.truncated && (
+                          <Alert
+                            message={`该季度共有 ${bondData.total_count} 只债券持仓，当前仅显示前 20 只`}
+                            type="info"
+                            showIcon
+                            style={{ marginBottom: 12 }}
+                          />
+                        )}
+                        <Table
+                          columns={bondHoldingsColumns}
+                          dataSource={bondData.bond_holdings}
+                          rowKey="bond_code"
+                          pagination={false}
+                          size="small"
+                        />
+                      </>
+                    ),
+                  }]}
                 />
               )}
             </>

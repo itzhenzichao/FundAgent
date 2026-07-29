@@ -50,8 +50,19 @@ def init_tables():
             content TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS fund_bond_holdings (
+            fund_code TEXT NOT NULL,
+            bond_code TEXT NOT NULL,
+            bond_name TEXT NOT NULL,
+            holding_ratio REAL,
+            holding_value REAL,
+            quarter TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (fund_code, bond_code, quarter)
+        );
         CREATE INDEX IF NOT EXISTS idx_stock_industry_code ON stock_industry(stock_code);
         CREATE INDEX IF NOT EXISTS idx_fund_holdings_code ON fund_holdings(fund_code, quarter);
+        CREATE INDEX IF NOT EXISTS idx_fund_bond_holdings_code ON fund_bond_holdings(fund_code, quarter);
         CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_messages(session_id, created_at);
     """)
     conn.commit()

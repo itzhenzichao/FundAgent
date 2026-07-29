@@ -1,9 +1,26 @@
 import akshare as ak
+import efinance as ef
 import pandas as pd
 import json
 import os
+from datetime import datetime, timedelta
 from typing import Optional
 from app.db import get_connection, init_tables
+
+# efinance 基金名称缓存（模块级，只加载一次）
+_fund_name_map: dict = {}
+
+
+def _load_fund_name_map():
+    global _fund_name_map
+    if _fund_name_map:
+        return
+    try:
+        df = ef.fund.get_fund_codes()
+        for _, row in df.iterrows():
+            _fund_name_map[str(row['基金代码'])] = str(row['基金简称'])
+    except Exception:
+        pass
 
 
 class FundService:
@@ -88,6 +105,12 @@ class FundService:
             except Exception:
                 pass
 
+        # efinance 名称兜底（纯债基金等雪球和东方财富基本信息都拿不到名称的情况）
+        if fund_name == code:
+            _load_fund_name_map()
+            if code in _fund_name_map:
+                fund_name = _fund_name_map[code]
+
         if fund_name == code and fund_type == "未知" and latest_nav is None:
             conn.close()
             raise ValueError(f"未找到基金 {code}")
@@ -161,10 +184,13 @@ class FundService:
 
             if df.empty:
                 conn.close()
-                raise ValueError(f"未找到基金 {code} 的持仓数据")
+                return {
+                    "fund_code": code, "holdings": [],
+                    "quarter": "", "total_count": 0, "truncated": False,
+                }
 
             if "季度" in df.columns:
-                latest_quarter = df["季度"].unique()[-1]
+                latest_quarter = sorted(df["季度"].unique(), reverse=True)[0]
                 df = df[df["季度"] == latest_quarter]
 
             # 清除旧缓存，写入新数据
@@ -290,3 +316,102 @@ class FundService:
             "fund_code": code,
             "returns": returns,
         }
+
+    def get_bond_holdings(self, code: str, date: Optional[str] = None) -> dict:
+        """获取基金债券持仓 — 缓存7天过期"""
+        init_tables()
+        conn = get_connection()
+
+        # 1. 先查缓存
+        cached = conn.execute(
+            "SELECT bond_code, bond_name, holding_ratio, holding_value, quarter FROM fund_bond_holdings WHERE fund_code = ? ORDER BY holding_ratio DESC",
+            (code,)
+        ).fetchall()
+
+        if cached:
+            meta = conn.execute(
+                "SELECT updated_at FROM fund_bond_holdings WHERE fund_code = ? LIMIT 1",
+                (code,)
+            ).fetchone()
+            if meta:
+                from datetime import datetime, timedelta
+                updated = datetime.fromisoformat(meta["updated_at"])
+                if datetime.now() - updated < timedelta(days=7):
+                    holdings = [
+                        {"bond_code": r["bond_code"], "bond_name": r["bond_name"],
+                         "holding_ratio": r["holding_ratio"], "holding_value": r["holding_value"],
+                         "quarter": r["quarter"]}
+                        for r in cached
+                    ]
+                    total_count = len(holdings)
+                    truncated = total_count > 20
+                    if truncated:
+                        holdings = holdings[:20]
+                    conn.close()
+                    return {
+                        "fund_code": code, "bond_holdings": holdings,
+                        "quarter": holdings[0]["quarter"] if holdings else "",
+                        "total_count": total_count, "truncated": truncated,
+                    }
+
+        # 2. 缓存过期或没有，调接口
+        try:
+            if date is None:
+                from datetime import datetime
+                date = str(datetime.now().year)
+
+            df = ak.fund_portfolio_bond_hold_em(symbol=code, date=date)
+
+            if df.empty and date == str(datetime.now().year):
+                prev_year = int(date) - 1
+                df = ak.fund_portfolio_bond_hold_em(symbol=code, date=str(prev_year))
+
+            if df.empty:
+                conn.close()
+                return {
+                    "fund_code": code, "bond_holdings": [],
+                    "quarter": "", "total_count": 0, "truncated": False,
+                }
+
+            if "季度" in df.columns:
+                latest_quarter = sorted(df["季度"].unique(), reverse=True)[0]
+                df = df[df["季度"] == latest_quarter]
+
+            # 清除旧缓存，写入新数据
+            conn.execute("DELETE FROM fund_bond_holdings WHERE fund_code = ?", (code,))
+            from datetime import datetime as dt
+            now = dt.now().isoformat()
+
+            holdings = []
+            for _, row in df.iterrows():
+                bond_code = str(row.get("债券代码", ""))
+                bond_name = str(row.get("债券名称", ""))
+                holding_ratio = float(row.get("占净值比例", 0)) if row.get("占净值比例") else None
+                holding_value = float(row.get("持仓市值", 0)) if row.get("持仓市值") else None
+                quarter = str(row.get("季度", ""))
+                conn.execute(
+                    "INSERT INTO fund_bond_holdings (fund_code, bond_code, bond_name, holding_ratio, holding_value, quarter, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (code, bond_code, bond_name, holding_ratio, holding_value, quarter, now)
+                )
+                holdings.append({
+                    "bond_code": bond_code, "bond_name": bond_name,
+                    "holding_ratio": holding_ratio, "holding_value": holding_value,
+                    "quarter": quarter,
+                })
+
+            conn.commit()
+            conn.close()
+
+            total_count = len(holdings)
+            truncated = total_count > 20
+            if truncated:
+                holdings = holdings[:20]
+
+            return {
+                "fund_code": code, "bond_holdings": holdings,
+                "quarter": holdings[0]["quarter"] if holdings else "",
+                "total_count": total_count, "truncated": truncated,
+            }
+        except Exception as e:
+            conn.close()
+            raise ValueError(f"查询基金 {code} 债券持仓失败: {e}")

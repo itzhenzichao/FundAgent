@@ -1,9 +1,16 @@
 # 敏感配置（包含 API Key）
 backend/app/config.py
 
+# 数据库（运行时生成）
+backend/app/data/
+
+# 本地备份
+backup/
+
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
 .venv/
 venv/
 

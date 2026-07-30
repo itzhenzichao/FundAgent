@@ -104,9 +104,132 @@ def remove_watchlist(code: str = Query(...)):
 def list_watchlist():
     init_tables()
     conn = get_connection()
-    rows = conn.execute("SELECT fund_code, fund_name, added_at FROM watchlist ORDER BY added_at DESC").fetchall()
+    rows = conn.execute("SELECT fund_code, fund_name, added_at, position_amount, profit_amount, cost_nav, cost_nav_date, position_updated_at FROM watchlist ORDER BY added_at DESC").fetchall()
     conn.close()
-    return [{"code": r["fund_code"], "name": r["fund_name"], "added_at": r["added_at"]} for r in rows]
+
+    # 批量获取持仓基金的最新净值（15分钟缓存）
+    holding_codes = [r["fund_code"] for r in rows if (r["position_amount"] or 0) > 0 and (r["cost_nav"] or 0) > 0]
+    nav_cache = _get_latest_navs(holding_codes)
+
+    result = []
+    for r in rows:
+        pos = r["position_amount"] or 0       # 用户输入的余额
+        prof = r["profit_amount"] or 0        # 用户输入的收益
+        cost_nav = r["cost_nav"] or 0
+        cost_nav_date = r["cost_nav_date"]    # 记录时的净值日期
+        is_holding = pos > 0 and cost_nav > 0
+
+        if is_holding:
+            nav_info = nav_cache.get(r["fund_code"])
+            latest_nav = nav_info["nav"] if nav_info else None
+            latest_date = nav_info["date"] if nav_info else None
+
+            # 只有净值日期变化时才重新计算
+            if latest_nav and cost_nav > 0 and latest_date and latest_date != cost_nav_date:
+                nav_change = latest_nav / cost_nav
+                balance = round(pos * nav_change, 2)
+                cost = pos - prof
+                current_cost = round(cost * nav_change, 2)
+                profit = round(balance - current_cost, 2)
+                profit_rate = round(profit / current_cost * 100, 2) if current_cost > 0 else 0
+            else:
+                # 日期未变，使用原始数据
+                balance = pos
+                profit = prof
+                profit_rate = round(prof / (pos - prof) * 100, 2) if (pos - prof) > 0 else 0
+        else:
+            balance = None
+            profit = None
+            profit_rate = None
+
+        item = {
+            "code": r["fund_code"],
+            "name": r["fund_name"],
+            "added_at": r["added_at"],
+            "position_amount": pos,
+            "balance": balance,
+            "profit": profit,
+            "profit_rate": profit_rate,
+            "is_holding": is_holding,
+        }
+        result.append(item)
+    return result
+
+
+# 净值缓存：15分钟
+_nav_cache: dict = {}
+_nav_cache_time: float = 0
+_NAV_CACHE_TTL = 900  # 15分钟
+
+
+def _get_latest_navs(codes: list[str]) -> dict:
+    """批量获取最新净值和日期，15分钟缓存"""
+    global _nav_cache, _nav_cache_time
+    import time
+    now = time.time()
+
+    if not codes:
+        return {}
+
+    # 缓存未过期，直接返回
+    if _nav_cache and now - _nav_cache_time < _NAV_CACHE_TTL:
+        return {c: _nav_cache.get(c) for c in codes if c in _nav_cache}
+
+    # 重新获取
+    _nav_cache = {}
+    for code in codes:
+        try:
+            info = fund_service.search_fund(code)
+            nav = info.get("latest_nav")
+            nav_date = info.get("latest_date")
+            if nav:
+                _nav_cache[code] = {"nav": nav, "date": nav_date}
+        except Exception:
+            pass
+    _nav_cache_time = now
+    return {c: _nav_cache.get(c) for c in codes if c in _nav_cache}
+
+
+class PositionRequest(BaseModel):
+    code: str
+    position_amount: float  # 当前余额
+    profit: float           # 当前收益（负数=亏损）
+
+
+@app.put("/api/watchlist/position")
+def update_position(req: PositionRequest):
+    init_tables()
+    conn = get_connection()
+    from datetime import datetime
+
+    balance = req.position_amount
+    profit = req.profit
+
+    # 记录当前净值和净值日期作为基准
+    cost_nav = 0
+    cost_nav_date = None
+    if balance > 0:
+        try:
+            fund_info = fund_service.search_fund(req.code)
+            cost_nav = fund_info.get("latest_nav", 0) or 0
+            cost_nav_date = fund_info.get("latest_date")
+        except Exception:
+            pass
+
+    # 清除持仓
+    if balance <= 0:
+        balance = 0
+        profit = 0
+        cost_nav = 0
+        cost_nav_date = None
+
+    conn.execute(
+        "UPDATE watchlist SET position_amount = ?, profit_amount = ?, cost_nav = ?, cost_nav_date = ?, position_updated_at = ? WHERE fund_code = ?",
+        (balance, profit, cost_nav, cost_nav_date, datetime.now().isoformat(), req.code)
+    )
+    conn.commit()
+    conn.close()
+    return {"message": "持仓更新成功", "code": req.code, "cost_nav": cost_nav, "cost_nav_date": cost_nav_date}
 
 
 # AI 聊天接口

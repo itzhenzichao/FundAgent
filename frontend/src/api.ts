@@ -57,6 +57,11 @@ export interface WatchlistItem {
   code: string
   name: string
   added_at: string
+  position_amount: number
+  balance: number | null
+  profit: number | null
+  profit_rate: number | null
+  is_holding: boolean
 }
 
 export const addWatchlist = (code: string, name: string) =>
@@ -67,6 +72,9 @@ export const removeWatchlist = (code: string) =>
 
 export const getWatchlist = () =>
   api.get<WatchlistItem[]>('/watchlist/list').then(r => r.data)
+
+export const updatePosition = (code: string, position_amount: number, profit: number) =>
+  api.put('/watchlist/position', { code, position_amount, profit }).then(r => r.data)
 
 export interface NavData {
   fund_code: string

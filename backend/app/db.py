@@ -41,7 +41,11 @@ def init_tables():
         CREATE TABLE IF NOT EXISTS watchlist (
             fund_code TEXT PRIMARY KEY,
             fund_name TEXT NOT NULL,
-            added_at TEXT NOT NULL
+            added_at TEXT NOT NULL,
+            position_amount REAL DEFAULT 0,
+            profit_amount REAL DEFAULT 0,
+            cost_nav REAL DEFAULT 0,
+            position_updated_at TEXT
         );
         CREATE TABLE IF NOT EXISTS chat_messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,5 +69,26 @@ def init_tables():
         CREATE INDEX IF NOT EXISTS idx_fund_bond_holdings_code ON fund_bond_holdings(fund_code, quarter);
         CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_messages(session_id, created_at);
     """)
+    # 对已存在的 watchlist 表添加新列（兼容旧数据库）
+    try:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN position_amount REAL DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN profit_amount REAL DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN cost_nav REAL DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN position_updated_at TEXT")
+    except Exception:
+        pass
+    try:
+        conn.execute("ALTER TABLE watchlist ADD COLUMN cost_nav_date TEXT")
+    except Exception:
+        pass
     conn.commit()
     conn.close()

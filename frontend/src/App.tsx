@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { Input, Card, Descriptions, Table, Tag, Alert, Spin, Typography, Row, Col, Tabs, Button, message, Segmented, Collapse } from 'antd'
+import { Input, Card, Descriptions, Table, Tag, Alert, Spin, Typography, Tabs, Button, message, Segmented, Collapse, Modal, Form, InputNumber } from 'antd'
 import ChatBubble from './ChatBubble'
-import { SearchOutlined, StarOutlined, StarFilled, DeleteOutlined } from '@ant-design/icons'
+import { SearchOutlined, StarOutlined, StarFilled, DeleteOutlined, WalletOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
-import { searchFund, getFundIndustry, addWatchlist, removeWatchlist, getWatchlist, getFundNav, getFundReturns, getBondHoldings } from './api'
+import { searchFund, getFundIndustry, addWatchlist, removeWatchlist, getWatchlist, getFundNav, getFundReturns, getBondHoldings, updatePosition } from './api'
 import type { FundInfo, FundIndustryResult, Holding, WatchlistItem, NavData, ReturnsData, BondHoldingData } from './api'
 import './App.css'
 
@@ -30,6 +30,10 @@ function App() {
   const [navData, setNavData] = useState<NavData | null>(null)
   const [returnsData, setReturnsData] = useState<ReturnsData | null>(null)
   const [bondData, setBondData] = useState<BondHoldingData | null>(null)
+  const [watchlistFilter, setWatchlistFilter] = useState<string>('全部')
+  const [positionModalOpen, setPositionModalOpen] = useState(false)
+  const [positionFund, setPositionFund] = useState<WatchlistItem | null>(null)
+  const [positionForm] = Form.useForm()
 
   const loadWatchlist = async () => {
     try {
@@ -135,6 +139,28 @@ function App() {
       if (fundInfo && fundInfo.code === code) setIsInWatchlist(false)
     } catch {
       message.error('操作失败')
+    }
+  }
+
+  const handleOpenPosition = (record: WatchlistItem) => {
+    setPositionFund(record)
+    positionForm.setFieldsValue({
+      position_amount: record.is_holding && record.balance !== null ? record.balance : undefined,
+      profit: record.is_holding && record.profit !== null ? record.profit : undefined,
+    })
+    setPositionModalOpen(true)
+  }
+
+  const handleSavePosition = async () => {
+    if (!positionFund) return
+    try {
+      const values = await positionForm.validateFields()
+      await updatePosition(positionFund.code, values.position_amount || 0, values.profit || 0)
+      message.success('持仓已更新')
+      setPositionModalOpen(false)
+      loadWatchlist()
+    } catch {
+      message.error('更新失败')
     }
   }
 
@@ -293,6 +319,32 @@ function App() {
     { title: '基金代码', dataIndex: 'code', key: 'code' },
     { title: '基金名称', dataIndex: 'name', key: 'name' },
     {
+      title: '状态', key: 'is_holding',
+      render: (_: any, record: WatchlistItem) =>
+        record.is_holding ? <Tag color="green">持有</Tag> : null,
+    },
+    {
+      title: '当前余额', key: 'balance',
+      render: (_: any, record: WatchlistItem) =>
+        record.is_holding && record.balance !== null ? record.balance.toLocaleString() : '-',
+    },
+    {
+      title: '收益', key: 'profit',
+      render: (_: any, record: WatchlistItem) => {
+        if (!record.is_holding || record.profit === null) return '-'
+        const v = record.profit
+        return <span style={{ color: v >= 0 ? '#cf1322' : '#3f8600', fontWeight: 600 }}>{v >= 0 ? '+' : ''}{v.toLocaleString()}</span>
+      },
+    },
+    {
+      title: '收益率', key: 'profit_rate',
+      render: (_: any, record: WatchlistItem) => {
+        if (!record.is_holding || record.profit_rate === null) return '-'
+        const v = record.profit_rate
+        return <span style={{ color: v >= 0 ? '#cf1322' : '#3f8600', fontWeight: 600 }}>{v >= 0 ? '+' : ''}{v}%</span>
+      },
+    },
+    {
       title: '添加时间', dataIndex: 'added_at', key: 'added_at',
       render: (v: string) => v?.slice(0, 10) || '-',
     },
@@ -301,6 +353,7 @@ function App() {
       render: (_: any, record: WatchlistItem) => (
         <>
           <Button type="link" size="small" onClick={() => handleSearch(record.code)}>查看</Button>
+          <Button type="link" size="small" icon={<WalletOutlined />} onClick={() => handleOpenPosition(record)}>持仓</Button>
           <Button type="link" size="small" danger onClick={() => handleRemoveFromWatchlist(record.code)}>
             <DeleteOutlined /> 移除
           </Button>
@@ -525,23 +578,51 @@ function App() {
           key: 'watchlist',
           label: '自选',
           children: (
-            <Card title="自选基金列表">
-              {watchlist.length === 0 ? (
-                <Typography.Text type="secondary">暂无自选基金，查询基金后点击"加自选"添加</Typography.Text>
-              ) : (
-                <Table
-                  columns={watchlistColumns}
-                  dataSource={watchlist}
-                  rowKey="code"
-                  pagination={false}
-                  size="small"
-                />
-              )}
-            </Card>
+            <>
+              <Segmented
+                options={['全部', '持有']}
+                value={watchlistFilter}
+                onChange={v => setWatchlistFilter(v as string)}
+                style={{ marginBottom: 16 }}
+              />
+              <Card title="自选基金列表">
+                {watchlist.length === 0 ? (
+                  <Typography.Text type="secondary">暂无自选基金，查询基金后点击"加自选"添加</Typography.Text>
+                ) : (
+                  <Table
+                    columns={watchlistColumns}
+                    dataSource={watchlistFilter === '持有' ? watchlist.filter(w => w.is_holding) : watchlist}
+                    rowKey="code"
+                    pagination={false}
+                    size="small"
+                  />
+                )}
+              </Card>
+            </>
           ),
         },
       ]} />
       <ChatBubble />
+
+      <Modal
+        title={positionFund ? `持仓设置 - ${positionFund.name}` : '持仓设置'}
+        open={positionModalOpen}
+        onOk={handleSavePosition}
+        onCancel={() => setPositionModalOpen(false)}
+        okText="保存"
+      >
+        <Form form={positionForm} layout="vertical">
+          <Form.Item name="position_amount" label="当前余额（元）" rules={[{ required: true, message: '请输入当前余额' }]}>
+            <InputNumber style={{ width: '100%' }} min={0} precision={2} placeholder="输入当前余额" />
+          </Form.Item>
+          <Form.Item name="profit" label="持有收益（元）" rules={[{ required: true, message: '请输入持有收益' }]}>
+            <InputNumber style={{ width: '100%' }} precision={2} placeholder="亏损输入负数" />
+          </Form.Item>
+          <Typography.Text type="secondary">
+            系统会根据基金净值变化自动更新余额和收益。余额和收益都输入0可清除持仓。
+          </Typography.Text>
+        </Form>
+      </Modal>
     </div>
   )
 }

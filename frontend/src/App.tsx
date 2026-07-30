@@ -34,20 +34,31 @@ function App() {
   const [positionModalOpen, setPositionModalOpen] = useState(false)
   const [positionFund, setPositionFund] = useState<WatchlistItem | null>(null)
   const [positionForm] = Form.useForm()
+  const [watchlistLoading, setWatchlistLoading] = useState(false)
+  const [toggleWatchlistLoading, setToggleWatchlistLoading] = useState(false)
+  const [removingCode, setRemovingCode] = useState<string | null>(null)
+  const [positionSaving, setPositionSaving] = useState(false)
+  const [navLoading, setNavLoading] = useState(false)
 
   const loadWatchlist = async () => {
+    setWatchlistLoading(true)
     try {
       const list = await getWatchlist()
       setWatchlist(list)
-    } catch {}
+    } catch {} finally {
+      setWatchlistLoading(false)
+    }
   }
 
   const loadNavData = async (code: string, period: string) => {
+    setNavLoading(true)
     try {
       const data = await getFundNav(code, period)
       setNavData(data)
     } catch {
       setNavData(null)
+    } finally {
+      setNavLoading(false)
     }
   }
 
@@ -116,6 +127,7 @@ function App() {
 
   const handleToggleWatchlist = async () => {
     if (!fundInfo) return
+    setToggleWatchlistLoading(true)
     try {
       if (isInWatchlist) {
         await removeWatchlist(fundInfo.code)
@@ -128,10 +140,13 @@ function App() {
       loadWatchlist()
     } catch {
       message.error('操作失败')
+    } finally {
+      setToggleWatchlistLoading(false)
     }
   }
 
   const handleRemoveFromWatchlist = async (code: string) => {
+    setRemovingCode(code)
     try {
       await removeWatchlist(code)
       message.success('已从自选移除')
@@ -139,6 +154,8 @@ function App() {
       if (fundInfo && fundInfo.code === code) setIsInWatchlist(false)
     } catch {
       message.error('操作失败')
+    } finally {
+      setRemovingCode(null)
     }
   }
 
@@ -153,6 +170,7 @@ function App() {
 
   const handleSavePosition = async () => {
     if (!positionFund) return
+    setPositionSaving(true)
     try {
       const values = await positionForm.validateFields()
       await updatePosition(positionFund.code, values.position_amount || 0, values.profit || 0)
@@ -161,6 +179,8 @@ function App() {
       loadWatchlist()
     } catch {
       message.error('更新失败')
+    } finally {
+      setPositionSaving(false)
     }
   }
 
@@ -354,8 +374,8 @@ function App() {
         <>
           <Button type="link" size="small" onClick={() => handleSearch(record.code)}>查看</Button>
           <Button type="link" size="small" icon={<WalletOutlined />} onClick={() => handleOpenPosition(record)}>持仓</Button>
-          <Button type="link" size="small" danger onClick={() => handleRemoveFromWatchlist(record.code)}>
-            <DeleteOutlined /> 移除
+          <Button type="link" size="small" danger loading={removingCode === record.code} onClick={() => handleRemoveFromWatchlist(record.code)}>
+            {removingCode !== record.code && <><DeleteOutlined /> 移除</>}
           </Button>
         </>
       ),
@@ -427,6 +447,7 @@ function App() {
                         type="text"
                         icon={isInWatchlist ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
                         onClick={handleToggleWatchlist}
+                        loading={toggleWatchlistLoading}
                       >
                         {isInWatchlist ? '已自选' : '加自选'}
                       </Button>
@@ -470,13 +491,18 @@ function App() {
                   items={[{
                     key: 'nav',
                     label: '净值走势 & 回撤分析',
-                    extra: <Segmented options={PERIOD_OPTIONS} value={navPeriod} onChange={v => setNavPeriod(v as string)} />,
+                    extra: <Segmented options={PERIOD_OPTIONS} value={navPeriod} onChange={v => setNavPeriod(v as string)} disabled={navLoading} />,
                     children: (
                       <>
-                        <Typography.Text type="secondary" style={{ marginBottom: 8 }}>
-                          区间最大回撤: <Typography.Text type="danger">{navData.max_drawdown}%</Typography.Text>
-                        </Typography.Text>
-                        {navChartOption && <ReactECharts option={navChartOption} style={{ height: 300 }} />}
+                        {navLoading && <Spin size="large" style={{ display: 'block', margin: '20px auto' }} />}
+                        {!navLoading && (
+                          <>
+                            <Typography.Text type="secondary" style={{ marginBottom: 8 }}>
+                              区间最大回撤: <Typography.Text type="danger">{navData.max_drawdown}%</Typography.Text>
+                            </Typography.Text>
+                            {navChartOption && <ReactECharts option={navChartOption} style={{ height: 300 }} />}
+                          </>
+                        )}
                       </>
                     ),
                   }]}
@@ -586,7 +612,9 @@ function App() {
                 style={{ marginBottom: 16 }}
               />
               <Card title="自选基金列表">
-                {watchlist.length === 0 ? (
+                {watchlistLoading && watchlist.length === 0 ? (
+                  <Spin size="large" style={{ display: 'block', margin: '40px auto' }} />
+                ) : watchlist.length === 0 ? (
                   <Typography.Text type="secondary">暂无自选基金，查询基金后点击"加自选"添加</Typography.Text>
                 ) : (
                   <Table
@@ -595,6 +623,7 @@ function App() {
                     rowKey="code"
                     pagination={false}
                     size="small"
+                    loading={watchlistLoading}
                   />
                 )}
               </Card>
@@ -608,6 +637,7 @@ function App() {
         title={positionFund ? `持仓设置 - ${positionFund.name}` : '持仓设置'}
         open={positionModalOpen}
         onOk={handleSavePosition}
+        confirmLoading={positionSaving}
         onCancel={() => setPositionModalOpen(false)}
         okText="保存"
       >

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
-import { Input, Card, Descriptions, Table, Tag, Alert, Spin, Typography, Tabs, Button, message, Segmented, Collapse, Modal, Form, InputNumber } from 'antd'
+import { useState, useEffect, useMemo } from 'react'
+import { Input, Card, Descriptions, Table, Tag, Alert, Spin, Typography, Tabs, Button, message, Segmented, Collapse, Modal, Form, InputNumber, Tooltip } from 'antd'
 import ChatBubble from './ChatBubble'
-import { SearchOutlined, StarOutlined, StarFilled, DeleteOutlined, WalletOutlined } from '@ant-design/icons'
+import { SearchOutlined, StarOutlined, StarFilled, DeleteOutlined, WalletOutlined, FundOutlined, WarningOutlined } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
 import { searchFund, getFundIndustry, addWatchlist, removeWatchlist, getWatchlist, getFundNav, getFundReturns, getBondHoldings, updatePosition } from './api'
 import type { FundInfo, FundIndustryResult, Holding, WatchlistItem, NavData, ReturnsData, BondHoldingData } from './api'
@@ -226,7 +226,7 @@ function App() {
     )
 
     return {
-      tooltip: { trigger: 'axis', formatter: (params: any) => {
+      tooltip: { trigger: 'axis', backgroundColor: 'rgba(30,41,59,0.95)', borderColor: 'rgba(255,255,255,0.1)', textStyle: { color: '#e2e8f0' }, formatter: (params: any) => {
         const p = params.find((x: any) => x.value != null)
         if (!p) return ''
         const idx = p.dataIndex
@@ -235,9 +235,9 @@ function App() {
         return `${dates[idx]}<br/>净值: ${p.value}<br/>回撤: ${dd}%<br/>状态: ${state}`
       }},
       grid: { left: 60, right: 30, top: 30, bottom: 40 },
-      legend: { data: ['净值', '最大回撤区间'], top: 0 },
-      xAxis: { type: 'category', data: dates, axisLabel: { rotate: 45, fontSize: 10 } },
-      yAxis: { type: 'value', name: '净值', scale: true },
+      legend: { data: ['净值', '最大回撤区间'], top: 0, textStyle: { color: 'rgba(255,255,255,0.65)' } },
+      xAxis: { type: 'category', data: dates, axisLabel: { rotate: 45, fontSize: 10, color: 'rgba(255,255,255,0.45)' }, axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } }, splitLine: { show: false } },
+      yAxis: { type: 'value', name: '净值', scale: true, axisLabel: { color: 'rgba(255,255,255,0.45)' }, nameTextStyle: { color: 'rgba(255,255,255,0.45)' }, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } } },
       animation: false,
       series: [
         {
@@ -282,14 +282,14 @@ function App() {
   })() : null
 
   const industryPieOption = industryResult ? {
-    tooltip: { trigger: 'item', formatter: '{b}: {c}% ({d}%)' },
-    legend: { orient: 'vertical', left: 'left', type: 'scroll' },
+    tooltip: { trigger: 'item', formatter: '{b}: {c}% ({d}%)', backgroundColor: 'rgba(30,41,59,0.95)', borderColor: 'rgba(255,255,255,0.1)', textStyle: { color: '#e2e8f0' } },
+    legend: { orient: 'vertical', left: 'left', type: 'scroll', textStyle: { color: 'rgba(255,255,255,0.65)' } },
     series: [{
       type: 'pie',
       radius: ['40%', '70%'],
       avoidLabelOverlap: true,
-      itemStyle: { borderRadius: 10, borderColor: '#fff', borderWidth: 2 },
-      label: { show: true, formatter: '{b}\n{c}%' },
+      itemStyle: { borderRadius: 10, borderColor: '#1e293b', borderWidth: 2 },
+      label: { show: true, formatter: '{b}\n{c}%', color: 'rgba(255,255,255,0.65)' },
       data: industryResult.industry_distribution.map(item => ({
         name: item.industry,
         value: Math.round(item.total_ratio * 100) / 100,
@@ -395,25 +395,53 @@ function App() {
     },
   ]
 
-  return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: 24 }}>
-      <Typography.Title level={2}>基金持仓行业分析</Typography.Title>
+  // 粒子效果（只生成一次）
+  const particles = useMemo(() =>
+    Array.from({ length: 30 }, (_, i) => ({
+      id: i,
+      left: `${Math.random() * 100}%`,
+      size: Math.random() * 4 + 2,
+      duration: Math.random() * 20 + 15,
+      delay: `${-Math.random() * 20}`,  // 负延迟：粒子一开始就分布在各个位置
+      opacity: Math.random() * 0.5 + 0.2,
+    })), [])
 
-      <Collapse
-        defaultActiveKey={['disclaimer']}
-        style={{ marginBottom: 24 }}
-        items={[{
-          key: 'disclaimer',
-          label: '免责声明',
-          children: (
-            <Alert
-              message="本工具仅提供数据分析和信息展示，不构成任何投资建议。投资有风险，入市需谨慎。过往业绩不代表未来表现。"
-              type="warning"
-              showIcon
-            />
-          ),
-        }]}
-      />
+  return (
+    <>
+      <div className="bg-glow" />
+      <div className="particles">
+        {particles.map(p => (
+          <div
+            key={p.id}
+            className="particle"
+            style={{
+              left: p.left,
+              width: p.size,
+              height: p.size,
+              animationDuration: `${p.duration}s`,
+              animationDelay: `${p.delay}s`,
+              opacity: p.opacity,
+            }}
+          />
+        ))}
+      </div>
+
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: 24, position: 'relative', zIndex: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <FundOutlined style={{ fontSize: 28, color: '#1677ff' }} />
+          <div>
+            <div style={{ fontSize: 22, fontWeight: 700, background: 'linear-gradient(135deg, #1677ff, #69b1ff)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              FundScope
+            </div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', marginTop: -2 }}>基金持仓行业分析</div>
+          </div>
+        </div>
+        <Tooltip title="本工具仅提供数据分析和信息展示，不构成任何投资建议。投资有风险，入市需谨慎。">
+          <WarningOutlined style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16, cursor: 'pointer' }} />
+        </Tooltip>
+      </div>
+      <div className="header-line" />
 
       <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
         {
@@ -654,6 +682,7 @@ function App() {
         </Form>
       </Modal>
     </div>
+    </>
   )
 }
 

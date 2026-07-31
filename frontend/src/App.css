@@ -1,11 +1,40 @@
-body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+/* 表格斑马纹 */
+.ant-table-tbody > tr:nth-child(even) > td {
+  background: rgba(255,255,255,0.02) !important;
+}
+.ant-table-tbody > tr:hover > td {
+  background: rgba(255,255,255,0.06) !important;
 }
 
+/* 折叠面板微边框 */
+.ant-collapse {
+  border: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* 卡片微边框 + 玻璃效果 */
+.ant-card {
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  backdrop-filter: blur(10px);
+  background: rgba(30, 41, 59, 0.8) !important;
+}
+
+/* 折叠面板玻璃效果 */
+.ant-collapse {
+  backdrop-filter: blur(10px);
+  background: rgba(30, 41, 59, 0.6) !important;
+}
+
+/* 聊天 Markdown 样式 */
 .chat-markdown p { margin: 0 0 8px 0; }
 .chat-markdown p:last-child { margin-bottom: 0; }
 .chat-markdown ul, .chat-markdown ol { padding-left: 20px; margin: 4px 0; }
 .chat-markdown table { border-collapse: collapse; margin: 8px 0; }
-.chat-markdown th, .chat-markdown td { border: 1px solid #d9d9d9; padding: 4px 8px; }
-.chat-markdown code { background: rgba(0,0,0,0.06); padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }
+.chat-markdown th, .chat-markdown td { border: 1px solid rgba(255,255,255,0.15); padding: 4px 8px; }
+.chat-markdown code { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }
+
+/* 标题渐变线 */
+.header-line {
+  height: 1px;
+  background: linear-gradient(90deg, #1677ff, rgba(105, 177, 255, 0.3), transparent);
+  margin-bottom: 24px;
+}

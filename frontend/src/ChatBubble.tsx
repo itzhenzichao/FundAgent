@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button, Input, Typography, Space, Drawer, Tooltip, message } from 'antd'
-import { MessageOutlined, DeleteOutlined, SendOutlined, PlusOutlined, StarOutlined, LineChartOutlined, FundOutlined, AlertOutlined } from '@ant-design/icons'
+import { MessageOutlined, DeleteOutlined, SendOutlined, PlusOutlined, StarOutlined, LineChartOutlined, FundOutlined, AlertOutlined, WalletOutlined } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown'
 import { v4 as uuidv4 } from 'uuid'
 import { streamChat, fetchChatHistory, clearChatSession } from './chatApi'
+import type { ToolCallInfo } from './chatApi'
 
 interface DisplayMessage {
   role: 'user' | 'assistant'
@@ -14,7 +15,7 @@ const QUICK_PROMPTS = [
   { label: '打分', icon: <StarOutlined />, text: '请用郑希框架给 $基金代码$ 打分，评估景气方向、ROE弹性、全球视野、流动性、集中度与周期拼接、业绩回撤印证六个维度' },
   { label: '持仓分析', icon: <FundOutlined />, text: '请分析 $基金代码$ 的持仓结构和行业分布，是否偏离其声称的投资方向' },
   { label: '回撤评估', icon: <LineChartOutlined />, text: '请评估 $基金代码$ 的最大回撤和净值走势，分析回撤的原因和修复情况' },
-  { label: '风险提示', icon: <AlertOutlined />, text: '请分析 $基金代码$ 的主要风险点，包括集中度风险、行业周期风险、流动性风险等' },
+  { label: '我的持仓', icon: <WalletOutlined />, text: '请分析我自选列表中的基金持仓情况' },
 ]
 
 const FUND_PLACEHOLDER = '$基金代码$'
@@ -28,6 +29,7 @@ export default function ChatBubble() {
   // 用 ref 存流式内容，避免 onDone 嵌套 setState 导致重复渲染
   const streamingRef = useRef('')
   const [streamingContent, setStreamingContent] = useState('')
+  const [toolCalls, setToolCalls] = useState<ToolCallInfo[]>([])
   const abortRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<any>(null)
@@ -42,7 +44,7 @@ export default function ChatBubble() {
     }
   }, [open, sessionId])
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, streamingContent])
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, streamingContent, toolCalls])
 
   const handleSend = () => {
     const text = input.trim()
@@ -52,6 +54,7 @@ export default function ChatBubble() {
     setLoading(true)
     streamingRef.current = ''
     setStreamingContent('')
+    setToolCalls([])
 
     // 立即添加用户消息到列表
     setMessages(prev => [...prev, { role: 'user', content: text }])
@@ -69,13 +72,18 @@ export default function ChatBubble() {
         streamingRef.current = ''
         setMessages(prev => [...prev, { role: 'assistant', content }])
         setStreamingContent('')
+        setToolCalls([])
         setLoading(false)
       },
       () => {
         streamingRef.current = ''
         setMessages(prev => [...prev, { role: 'assistant', content: '抱歉，回复出错，请重试。' }])
         setStreamingContent('')
+        setToolCalls([])
         setLoading(false)
+      },
+      (info) => {
+        setToolCalls(prev => [...prev, info])
       },
     )
   }
@@ -85,6 +93,7 @@ export default function ChatBubble() {
     setMessages([])
     streamingRef.current = ''
     setStreamingContent('')
+    setToolCalls([])
   }
 
   const handleClear = async () => {
@@ -92,6 +101,7 @@ export default function ChatBubble() {
     setMessages([])
     streamingRef.current = ''
     setStreamingContent('')
+    setToolCalls([])
     message.success('对话已清除')
   }
 
@@ -108,6 +118,12 @@ export default function ChatBubble() {
   const displayMessages: DisplayMessage[] = streamingContent
     ? [...messages, { role: 'assistant', content: streamingContent }]
     : messages
+
+  const getToolCallLabel = (tc: ToolCallInfo) => {
+    const code = tc.arguments?.code
+    if (code) return `${tc.label}: ${code}`
+    return tc.label
+  }
 
   return (
     <>
@@ -145,7 +161,7 @@ export default function ChatBubble() {
         styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', height: 'calc(100% - 55px)' } }}
       >
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-          {displayMessages.length === 0 && (
+          {displayMessages.length === 0 && toolCalls.length === 0 && (
             <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 40 }}>
               输入基金或股票相关问题开始对话
             </Typography.Text>
@@ -165,6 +181,22 @@ export default function ChatBubble() {
               </div>
             </div>
           ))}
+          {toolCalls.length > 0 && (
+            <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-start' }}>
+              <div style={{
+                maxWidth: '85%', padding: '8px 12px', borderRadius: 8,
+                backgroundColor: '#f0f5ff', color: '#1677ff',
+                lineHeight: 1.6, fontSize: 13,
+              }}>
+                {toolCalls.map((tc, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', backgroundColor: '#1677ff', animation: 'pulse 1.5s infinite' }} />
+                    {getToolCallLabel(tc)}...
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -193,6 +225,14 @@ export default function ChatBubble() {
           </Space.Compact>
         </div>
       </Drawer>
+
+      <style>{`
+        @keyframes pulse {
+          0% { opacity: 1; }
+          50% { opacity: 0.3; }
+          100% { opacity: 1; }
+        }
+      `}</style>
     </>
   )
 }

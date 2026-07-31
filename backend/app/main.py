@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
+from datetime import datetime
 from app.db import get_connection, init_tables
 from app.fund_service import FundService
 from app.industry_service import IndustryService
@@ -80,7 +81,6 @@ class WatchlistItem(BaseModel):
 def add_watchlist(item: WatchlistItem):
     init_tables()
     conn = get_connection()
-    from datetime import datetime
     conn.execute(
         "INSERT OR REPLACE INTO watchlist (fund_code, fund_name, added_at) VALUES (?, ?, ?)",
         (item.code, item.name, datetime.now().isoformat())
@@ -102,14 +102,41 @@ def remove_watchlist(code: str = Query(...)):
 
 @app.get("/api/watchlist/list")
 def list_watchlist():
+    global _nav_fetched_today, _nav_fetched_date
+
     init_tables()
     conn = get_connection()
     rows = conn.execute("SELECT fund_code, fund_name, added_at, position_amount, profit_amount, cost_nav, cost_nav_date, position_updated_at FROM watchlist ORDER BY added_at DESC").fetchall()
-    conn.close()
 
-    # 批量获取持仓基金的最新净值（15分钟缓存）
-    holding_codes = [r["fund_code"] for r in rows if (r["position_amount"] or 0) > 0 and (r["cost_nav"] or 0) > 0]
-    nav_cache = _get_latest_navs(holding_codes)
+    # 跨天重置已查记录
+    now = datetime.now()
+    today_str = now.strftime("%Y-%m-%d")
+    if today_str != _nav_fetched_date:
+        _nav_fetched_today = set()
+        _nav_fetched_date = today_str
+    after_2030 = now.hour > 20 or (now.hour == 20 and now.minute >= 30)
+
+    codes_to_fetch = []
+    for r in rows:
+        pos = r["position_amount"] or 0
+        cost_nav = r["cost_nav"] or 0
+        cost_nav_date = r["cost_nav_date"]
+        if pos <= 0 or cost_nav <= 0:
+            continue
+        # 非同一天：一定查
+        if cost_nav_date != today_str:
+            codes_to_fetch.append(r["fund_code"])
+            continue
+        # 同一天且 20:30 后：查一次（查过就不查了，通过 _nav_fetched_today 控制）
+        if after_2030 and r["fund_code"] not in _nav_fetched_today:
+            codes_to_fetch.append(r["fund_code"])
+
+    nav_cache = _get_latest_navs(codes_to_fetch) if codes_to_fetch else {}
+
+    # 标记今天已查过的基金
+    for code in codes_to_fetch:
+        if code in nav_cache:
+            _nav_fetched_today.add(code)
 
     result = []
     for r in rows:
@@ -124,14 +151,22 @@ def list_watchlist():
             latest_nav = nav_info["nav"] if nav_info else None
             latest_date = nav_info["date"] if nav_info else None
 
-            # 只有净值日期变化时才重新计算
+            # 净值日期变化 → 重算并写回数据库
             if latest_nav and cost_nav > 0 and latest_date and latest_date != cost_nav_date:
                 nav_change = latest_nav / cost_nav
-                balance = round(pos * nav_change, 2)
+                # 本金不变
                 cost = pos - prof
-                current_cost = round(cost * nav_change, 2)
-                profit = round(balance - current_cost, 2)
-                profit_rate = round(profit / current_cost * 100, 2) if current_cost > 0 else 0
+                # 余额随净值变化
+                balance = round(pos * nav_change, 2)
+                # 收益 = 新余额 - 本金
+                profit = round(balance - cost, 2)
+                profit_rate = round(profit / cost * 100, 2) if cost > 0 else 0
+
+                # 写回数据库：更新余额、收益、净值日期为新基准
+                conn.execute(
+                    "UPDATE watchlist SET position_amount = ?, profit_amount = ?, cost_nav = ?, cost_nav_date = ?, position_updated_at = ? WHERE fund_code = ?",
+                    (balance, profit, latest_nav, latest_date, datetime.now().isoformat(), r["fund_code"])
+                )
             else:
                 # 日期未变，使用原始数据
                 balance = pos
@@ -145,7 +180,7 @@ def list_watchlist():
         item = {
             "code": r["fund_code"],
             "name": r["fund_name"],
-            "added_at": r["added_at"],
+            "updated_at": r["cost_nav_date"] if is_holding else None,
             "position_amount": pos,
             "balance": balance,
             "profit": profit,
@@ -153,41 +188,42 @@ def list_watchlist():
             "is_holding": is_holding,
         }
         result.append(item)
+
+    conn.commit()
+    conn.close()
     return result
 
 
-# 净值缓存：15分钟
-_nav_cache: dict = {}
-_nav_cache_time: float = 0
-_NAV_CACHE_TTL = 900  # 15分钟
+# 记录今天已查过新净值的基金（跨天重置）
+_nav_fetched_today: set = set()
+_nav_fetched_date: str = ""
 
 
 def _get_latest_navs(codes: list[str]) -> dict:
-    """批量获取最新净值和日期，15分钟缓存"""
-    global _nav_cache, _nav_cache_time
+    """批量获取最新净值和日期，绕过 search_fund 的1天缓存，直接调 akshare 拿最新值"""
+    import akshare as ak
     import time
-    now = time.time()
 
     if not codes:
         return {}
 
-    # 缓存未过期，直接返回
-    if _nav_cache and now - _nav_cache_time < _NAV_CACHE_TTL:
-        return {c: _nav_cache.get(c) for c in codes if c in _nav_cache}
-
-    # 重新获取
-    _nav_cache = {}
+    result = {}
     for code in codes:
         try:
-            info = fund_service.search_fund(code)
-            nav = info.get("latest_nav")
-            nav_date = info.get("latest_date")
-            if nav:
-                _nav_cache[code] = {"nav": nav, "date": nav_date}
+            df = ak.fund_open_fund_info_em(symbol=code, indicator="单位净值走势")
+            if df.empty:
+                continue
+            latest = df.iloc[-1]
+            cols = df.columns.tolist()
+            nav_col = "单位净值" if "单位净值" in cols else cols[1] if len(cols) > 1 else None
+            date_col = "净值日期" if "净值日期" in cols else cols[0] if len(cols) > 0 else None
+            if nav_col and date_col:
+                nav = float(latest[nav_col])
+                date = str(latest[date_col].date()) if hasattr(latest[date_col], 'date') else str(latest[date_col])
+                result[code] = {"nav": nav, "date": date}
         except Exception:
             pass
-    _nav_cache_time = now
-    return {c: _nav_cache.get(c) for c in codes if c in _nav_cache}
+    return result
 
 
 class PositionRequest(BaseModel):
@@ -200,19 +236,25 @@ class PositionRequest(BaseModel):
 def update_position(req: PositionRequest):
     init_tables()
     conn = get_connection()
-    from datetime import datetime
 
     balance = req.position_amount
     profit = req.profit
 
-    # 记录当前净值和净值日期作为基准
+    # 记录当前净值和净值日期作为基准（直接调 akshare，不走缓存）
     cost_nav = 0
     cost_nav_date = None
     if balance > 0:
         try:
-            fund_info = fund_service.search_fund(req.code)
-            cost_nav = fund_info.get("latest_nav", 0) or 0
-            cost_nav_date = fund_info.get("latest_date")
+            import akshare as ak
+            df = ak.fund_open_fund_info_em(symbol=req.code, indicator="单位净值走势")
+            if not df.empty:
+                latest = df.iloc[-1]
+                cols = df.columns.tolist()
+                nav_col = "单位净值" if "单位净值" in cols else cols[1] if len(cols) > 1 else None
+                date_col = "净值日期" if "净值日期" in cols else cols[0] if len(cols) > 0 else None
+                if nav_col and date_col:
+                    cost_nav = float(latest[nav_col])
+                    cost_nav_date = str(latest[date_col].date()) if hasattr(latest[date_col], 'date') else str(latest[date_col])
         except Exception:
             pass
 
@@ -242,9 +284,14 @@ class ChatRequest(BaseModel):
 def chat_send(req: ChatRequest):
     """SSE 流式聊天"""
     def event_generator():
-        for chunk in chat_service.stream_chat(req.session_id, req.message):
-            yield dict(data=chunk)
-    return EventSourceResponse(event_generator(), ping=None)
+        try:
+            for chunk in chat_service.stream_chat(req.session_id, req.message):
+                yield dict(data=chunk)
+        except Exception as e:
+            import json
+            yield dict(data=json.dumps({"error": str(e)}, ensure_ascii=False))
+            yield dict(data=json.dumps({"done": True}, ensure_ascii=False))
+    return EventSourceResponse(event_generator(), ping=15)
 
 
 @app.get("/api/chat/history")

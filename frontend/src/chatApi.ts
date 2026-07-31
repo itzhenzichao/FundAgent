@@ -4,6 +4,12 @@ export interface ChatMessage {
   created_at: string
 }
 
+export interface ToolCallInfo {
+  name: string
+  label: string
+  arguments: Record<string, any>
+}
+
 export async function fetchChatHistory(sessionId: string): Promise<ChatMessage[]> {
   const res = await fetch(`/api/chat/history?session_id=${encodeURIComponent(sessionId)}`)
   return res.json()
@@ -19,6 +25,7 @@ export function streamChat(
   onToken: (token: string) => void,
   onDone: () => void,
   onError: (err: Error) => void,
+  onToolCall?: (info: ToolCallInfo) => void,
 ): AbortController {
   const controller = new AbortController()
 
@@ -50,6 +57,7 @@ export function streamChat(
               const data = JSON.parse(jsonStr)
               if (data.done) { finished = true; onDone(); return }
               if (data.token) onToken(data.token)
+              if (data.tool_call) onToolCall?.(data.tool_call)
             } catch { /* skip */ }
           }
         }

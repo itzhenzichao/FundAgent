@@ -365,8 +365,8 @@ function App() {
       },
     },
     {
-      title: '添加时间', dataIndex: 'added_at', key: 'added_at',
-      render: (v: string) => v?.slice(0, 10) || '-',
+      title: '更新时间', dataIndex: 'updated_at', key: 'updated_at',
+      render: (v: string) => v?.slice(0, 16).replace('T', ' ') || '-',
     },
     {
       title: '操作', key: 'action',

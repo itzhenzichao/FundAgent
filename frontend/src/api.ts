@@ -56,7 +56,7 @@ export const getFundIndustry = (code: string, date?: string, fundName?: string) 
 export interface WatchlistItem {
   code: string
   name: string
-  added_at: string
+  updated_at: string
   position_amount: number
   balance: number | null
   profit: number | null

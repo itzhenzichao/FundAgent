@@ -26,20 +26,12 @@ export interface IndustryItem {
   total_ratio: number
 }
 
-export interface Deviation {
-  claimed_industry: string
-  claimed_ratio: number
-  threshold: number
-  is_deviant: boolean
-}
-
 export interface FundIndustryResult {
   fund_code: string
   fund_name: string
   quarter: string
   industry_distribution: IndustryItem[]
   unmatched_stocks: { stock_code: string; stock_name: string; holding_ratio: number | null }[]
-  deviation: Deviation | null
   total_count: number
   truncated: boolean
 }

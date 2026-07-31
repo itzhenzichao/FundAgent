@@ -537,26 +537,6 @@ function App() {
                 />
               )}
 
-              {industryResult && industryResult.deviation && (
-                <Collapse
-                  defaultActiveKey={['deviation']}
-                  style={{ marginBottom: 24 }}
-                  items={[{
-                    key: 'deviation',
-                    label: industryResult.deviation.is_deviant ? '偏离提示' : '合规检查',
-                    children: (
-                      <Alert
-                        message={industryResult.deviation.is_deviant
-                          ? `该基金声称方向为"${industryResult.deviation.claimed_industry}"，但实际持仓占比仅 ${industryResult.deviation.claimed_ratio}%，低于 80% 合规底线`
-                          : `该基金声称方向为"${industryResult.deviation.claimed_industry}"，实际持仓占比 ${industryResult.deviation.claimed_ratio}%，满足 80% 合规要求`}
-                        type={industryResult.deviation.is_deviant ? 'error' : 'success'}
-                        showIcon
-                      />
-                    ),
-                  }]}
-                />
-              )}
-
               {industryResult && (
                 <Collapse
                   defaultActiveKey={['industry', 'holdings']}

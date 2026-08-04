@@ -63,7 +63,8 @@ class ChatService:
                     tools=TOOLS,
                     stream=True,
                     temperature=0.7,
-                    max_tokens=2048,
+                    max_tokens=4096,
+                    timeout=60,
                 )
             except Exception as e:
                 # LLM 不支持 tools 参数，降级为无工具调用
@@ -75,14 +76,24 @@ class ChatService:
             tool_calls, content_tokens = self._process_stream(response)
 
             if tool_calls:
-                # 发送工具调用通知
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": tool_calls,
+                })
+
+                # 解析所有工具调用参数
+                parsed_calls = []
                 for tc in tool_calls:
                     fn_name = tc["function"]["name"]
                     try:
                         fn_args = json.loads(tc["function"]["arguments"])
                     except json.JSONDecodeError:
                         fn_args = {}
+                    parsed_calls.append((tc, fn_name, fn_args))
 
+                # 发送所有工具调用通知（前端只保留最新几个）
+                for tc, fn_name, fn_args in parsed_calls:
                     yield json.dumps({
                         "tool_call": {
                             "name": fn_name,
@@ -91,22 +102,16 @@ class ChatService:
                         }
                     }, ensure_ascii=False)
 
-                # 执行工具调用
-                messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": tool_calls,
-                })
+                # 并行执行工具调用
+                from concurrent.futures import ThreadPoolExecutor
+                def _exec(args):
+                    tc, fn_name, fn_args = args
+                    return tc, execute_tool(fn_name, fn_args)
 
-                for tc in tool_calls:
-                    fn_name = tc["function"]["name"]
-                    try:
-                        fn_args = json.loads(tc["function"]["arguments"])
-                    except json.JSONDecodeError:
-                        fn_args = {}
+                with ThreadPoolExecutor(max_workers=4) as executor:
+                    results = list(executor.map(_exec, parsed_calls))
 
-                    result = execute_tool(fn_name, fn_args)
-
+                for tc, result in results:
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],
@@ -135,7 +140,8 @@ class ChatService:
             messages=messages,
             stream=True,
             temperature=0.7,
-            max_tokens=2048,
+            max_tokens=4096,
+            timeout=60,
         )
         full_response = ""
         for chunk in response:

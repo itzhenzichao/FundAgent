@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Button, Input, Typography, Space, Drawer, Tooltip, message } from 'antd'
 import { MessageOutlined, DeleteOutlined, SendOutlined, PlusOutlined, StarOutlined, LineChartOutlined, FundOutlined, AlertOutlined, WalletOutlined } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { v4 as uuidv4 } from 'uuid'
 import { streamChat, fetchChatHistory, clearChatSession } from './chatApi'
 import type { ToolCallInfo } from './chatApi'
@@ -83,7 +84,7 @@ export default function ChatBubble() {
         setLoading(false)
       },
       (info) => {
-        setToolCalls(prev => [...prev, info])
+        setToolCalls(prev => [...prev.slice(-4), info])
       },
     )
   }
@@ -119,10 +120,28 @@ export default function ChatBubble() {
     ? [...messages, { role: 'assistant', content: streamingContent }]
     : messages
 
-  const getToolCallLabel = (tc: ToolCallInfo) => {
-    const code = tc.arguments?.code
-    if (code) return `${tc.label}: ${code}`
-    return tc.label
+  const getToolCallSummary = () => {
+    if (toolCalls.length === 0) return ''
+    // 按基金代码分组
+    const codeMap = new Map<string, Set<string>>()
+    const noCodeLabels = new Set<string>()
+    for (const tc of toolCalls) {
+      const code = tc.arguments?.code
+      if (code) {
+        if (!codeMap.has(code)) codeMap.set(code, new Set())
+        codeMap.get(code)!.add(tc.label)
+      } else {
+        noCodeLabels.add(tc.label)
+      }
+    }
+    const parts: string[] = []
+    for (const [code, labels] of codeMap) {
+      parts.push(`${code}·${[...labels].join('/')}`)
+    }
+    for (const label of noCodeLabels) {
+      parts.push(label)
+    }
+    return `正在分析 ${parts.join('，')}`
   }
 
   return (
@@ -169,13 +188,14 @@ export default function ChatBubble() {
           {displayMessages.map((msg, i) => (
             <div key={i} style={{ marginBottom: 12, display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
               <div style={{
-                maxWidth: '85%', padding: '8px 12px', borderRadius: 8,
-                backgroundColor: msg.role === 'user' ? '#1677ff' : '#f5f5f5',
-                color: msg.role === 'user' ? '#fff' : '#000',
+                maxWidth: '95%', padding: '8px 12px', borderRadius: 8,
+                backgroundColor: msg.role === 'user' ? '#1677ff' : '#1e293b',
+                color: msg.role === 'user' ? '#fff' : '#e2e8f0',
                 lineHeight: 1.6, wordBreak: 'break-word',
+                overflowX: 'auto',
               }}>
                 {msg.role === 'assistant'
-                  ? <div className="chat-markdown"><ReactMarkdown>{msg.content || '...'}</ReactMarkdown></div>
+                  ? <div className="chat-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]} components={{ table: ({ children }) => <div className="table-wrap"><table>{children}</table></div> }}>{msg.content || '...'}</ReactMarkdown></div>
                   : msg.content
                 }
               </div>
@@ -184,16 +204,13 @@ export default function ChatBubble() {
           {toolCalls.length > 0 && (
             <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'flex-start' }}>
               <div style={{
-                maxWidth: '85%', padding: '8px 12px', borderRadius: 8,
-                backgroundColor: '#f0f5ff', color: '#1677ff',
+                padding: '6px 12px', borderRadius: 8,
+                backgroundColor: 'rgba(22,119,255,0.1)', color: '#69b1ff',
                 lineHeight: 1.6, fontSize: 13,
+                display: 'flex', alignItems: 'center', gap: 6,
               }}>
-                {toolCalls.map((tc, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', backgroundColor: '#1677ff', animation: 'pulse 1.5s infinite' }} />
-                    {getToolCallLabel(tc)}...
-                  </div>
-                ))}
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', backgroundColor: '#1677ff', animation: 'pulse 1.5s infinite' }} />
+                {getToolCallSummary()}
               </div>
             </div>
           )}

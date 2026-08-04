@@ -28,9 +28,25 @@
 .chat-markdown p { margin: 0 0 8px 0; }
 .chat-markdown p:last-child { margin-bottom: 0; }
 .chat-markdown ul, .chat-markdown ol { padding-left: 20px; margin: 4px 0; }
-.chat-markdown table { border-collapse: collapse; margin: 8px 0; }
-.chat-markdown th, .chat-markdown td { border: 1px solid rgba(255,255,255,0.15); padding: 4px 8px; }
+.chat-markdown ul { list-style: none; padding-left: 0; }
+.chat-markdown ul li { position: relative; padding-left: 16px; margin-bottom: 4px; }
+.chat-markdown ul li::before { content: '•'; position: absolute; left: 4px; color: '#1677ff'; }
+
+/* 表格：横向滚动 + 紧凑样式 */
+.chat-markdown .table-wrap { overflow-x: auto; margin: 8px 0; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.chat-markdown .table-wrap::-webkit-scrollbar { height: 4px; }
+.chat-markdown .table-wrap::-webkit-scrollbar-thumb { background: rgba(22,119,255,0.3); border-radius: 2px; }
+.chat-markdown table { border-collapse: collapse; font-size: 13px; white-space: nowrap; }
+.chat-markdown th { background: rgba(22,119,255,0.15); color: #69b1ff; font-weight: 600; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.1); text-align: left; }
+.chat-markdown td { padding: 8px 12px; border: 1px solid rgba(255,255,255,0.08); white-space: pre-wrap; word-break: break-word; min-width: 60px; }
+.chat-markdown tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+
+/* 引用块：用于卡片化内容 */
+.chat-markdown blockquote { border-left: 3px solid '#1677ff'; background: rgba(22,119,255,0.08); padding: 8px 12px; margin: 8px 0; border-radius: 0 6px 6px 0; }
+.chat-markdown blockquote p { margin: 0; }
+
 .chat-markdown code { background: rgba(255,255,255,0.1); padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }
+.chat-markdown strong { color: '#69b1ff'; font-weight: 600; }
 
 /* 标题渐变线 */
 .header-line {

@@ -23,6 +23,17 @@ industry_service = IndustryService()
 chat_service = ChatService()
 
 
+@app.on_event("startup")
+def warm_mini_racer():
+    # akshare 每次调用都会新建 MiniRacer（内嵌 V8），多线程并发首次初始化会在
+    # Windows 上触发 V8 全局断言崩溃；启动时主线程预热一次可避免竞态
+    try:
+        import py_mini_racer
+        py_mini_racer.MiniRacer().eval("1+1")
+    except Exception:
+        pass
+
+
 @app.get("/api/fund/search")
 def search_fund(code: str = Query(...)):
     try:

@@ -3,4 +3,5 @@ efinance
 fastapi
 sse-starlette
 zhipuai
+openai
 uvicorn

@@ -3,13 +3,13 @@
   "manager_id": "462",
   "home": "https://www.efunds.com.cn/manager/462.shtml",
   "counts": {
-    "定期报告": 58,
+    "定期报告": 59,
     "基金经理手记": 15,
     "媒体报道": 4
   },
   "date_range": {
     "min": "2012-11-07",
-    "max": "2026-07-21"
+    "max": "2026-08-31"
   },
   "documents": [
     {
@@ -704,6 +704,15 @@
       "link": "https://www.efunds.com.cn/manager/report/2026/1/462_max.shtml",
       "body_chars": 1473,
       "path": "references/corpus/定期报告/00_2026-07-21_2026年第2季度报告.md"
+    },
+    {
+      "type": "定期报告",
+      "title": "2026年中期报告",
+      "date": "2026-08-31",
+      "source": "",
+      "link": "https://www.efunds.com.cn/manager/report/2026/2/462_max.shtml",
+      "body_chars": 1558,
+      "path": "references/corpus/定期报告/00_2026-08-31_2026年中期报告.md"
     }
   ]
 }

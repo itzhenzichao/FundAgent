@@ -32,20 +32,35 @@ export default function ChatBubble() {
   const [streamingContent, setStreamingContent] = useState('')
   const [toolCalls, setToolCalls] = useState<ToolCallInfo[]>([])
   const abortRef = useRef<AbortController | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const loadingHistoryRef = useRef(false)
   const inputRef = useRef<any>(null)
 
   useEffect(() => { localStorage.setItem('jj_chat_session', sessionId) }, [sessionId])
 
+  // 打开抽屉时瞬间定位到最新消息，不做平滑滚动（历史加载完成后跳一次即可）
+  const scrollToBottom = (smooth = true) => {
+    const el = scrollRef.current
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
+  }
+
   useEffect(() => {
     if (open) {
+      loadingHistoryRef.current = true
       fetchChatHistory(sessionId).then(history => {
         setMessages(history.map(m => ({ role: m.role, content: m.content })))
-      }).catch(() => {})
+      }).catch(() => {}).finally(() => {
+        requestAnimationFrame(() => {
+          scrollToBottom(false)
+          loadingHistoryRef.current = false
+        })
+      })
     }
   }, [open, sessionId])
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages, streamingContent, toolCalls])
+  useEffect(() => {
+    if (!loadingHistoryRef.current) scrollToBottom()
+  }, [messages, streamingContent, toolCalls])
 
   const handleSend = () => {
     const text = input.trim()
@@ -179,7 +194,7 @@ export default function ChatBubble() {
         }}
         styles={{ body: { padding: 0, display: 'flex', flexDirection: 'column', height: 'calc(100% - 55px)' } }}
       >
-        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
           {displayMessages.length === 0 && toolCalls.length === 0 && (
             <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 40 }}>
               输入基金或股票相关问题开始对话
@@ -214,7 +229,6 @@ export default function ChatBubble() {
               </div>
             </div>
           )}
-          <div ref={messagesEndRef} />
         </div>
 
         <div style={{ padding: 12, borderTop: '1px solid #f0f0f0' }}>

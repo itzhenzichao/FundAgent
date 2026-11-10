@@ -1,3 +1,11 @@
+import asyncio
+import sys
+
+if sys.platform == "win32":
+    # Windows proactor 事件循环在 socket accept 时可能出现 WinError 64
+    # 导致监听失效、整个服务不可用；改用 selector 循环规避
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
